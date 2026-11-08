@@ -2,6 +2,11 @@ name: Build DSH 2.0.17 for macOS 12 (experimental)
 
 on:
   workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/macos12-dmg.yml'
+      - 'scripts/patch_monterey.py'
 
 permissions:
   contents: read
