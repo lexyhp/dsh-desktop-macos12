@@ -169,7 +169,7 @@ jobs:
           PLIST='/tmp/dsh-monterey-mounted/DSH Desktop.app/Contents/Info.plist'
           MIN_VERSION=$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$PLIST")
           test "$MIN_VERSION" = "12.0.0"
-          lipo -verify_arch x86_64 arm64 '/tmp/dsh-monterey-mounted/DSH Desktop.app/Contents/MacOS/DSH Desktop'
+          lipo '/tmp/dsh-monterey-mounted/DSH Desktop.app/Contents/MacOS/DSH Desktop' -verify_arch x86_64 arm64
 
       - name: Upload experimental DMG
         uses: actions/upload-artifact@v4
