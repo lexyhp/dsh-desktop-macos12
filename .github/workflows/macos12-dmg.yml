@@ -58,6 +58,7 @@ jobs:
           set -euo pipefail
           CACHE_ROOT="$RUNNER_TEMP/dsh-electron-cache"
           mkdir -p "$CACHE_ROOT"
+          export ELECTRON_CACHE="$CACHE_ROOT"
           echo "ELECTRON_CACHE=$CACHE_ROOT" >> "$GITHUB_ENV"
           VERSION="43.0.0"
           OFFICIAL="https://github.com/electron/electron/releases/download/v${VERSION}"
@@ -109,7 +110,6 @@ jobs:
           const fs = require('fs');
           const path = 'source/dsh-plugin-desktop/package.json';
           const pkg = JSON.parse(fs.readFileSync(path, 'utf8'));
-          const cp = require('child_process');
           const manifest = fs.readFileSync(process.env.ELECTRON_CACHE + '/SHASUMS256.txt-43.0.0', 'utf8');
           const checksums = {};
           for (const arch of ['x64', 'arm64']) {
