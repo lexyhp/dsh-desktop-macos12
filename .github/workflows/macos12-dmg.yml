@@ -52,75 +52,58 @@ jobs:
           yarn workspace dsh-community-market build
           yarn workspace dsh-plugin-desktop build
 
-      - name: Pre-download Electron 43.0.0 archives with mirror fallback
+      - name: Verify and stage local Electron 43.0.0 distributions
         shell: bash
         run: |
           set -euo pipefail
-          CACHE_ROOT="$RUNNER_TEMP/dsh-electron-cache"
-          mkdir -p "$CACHE_ROOT"
-          export ELECTRON_CACHE="$CACHE_ROOT"
-          echo "ELECTRON_CACHE=$CACHE_ROOT" >> "$GITHUB_ENV"
-          VERSION="43.0.0"
+          VERSION=43.0.0
+          DIST="$GITHUB_WORKSPACE/source/dsh-plugin-desktop/.electron-dist"
+          mkdir -p "$DIST"
           OFFICIAL="https://github.com/electron/electron/releases/download/v${VERSION}"
           MIRROR="https://npmmirror.com/mirrors/electron/v${VERSION}"
-          # Pin and verify the upstream checksum manifest locally. @electron/get
-          # otherwise requests SHASUMS256.txt at packaging time even when ZIPs
-          # are cached, which repeatedly timed out with HTTP 504.
-          SHASUMS="$RUNNER_TEMP/SHASUMS256.txt"
-          for BASE in "$OFFICIAL" "$MIRROR"; do
-            if curl --fail --location --retry 5 --retry-all-errors --retry-delay 5 --connect-timeout 30 --max-time 180 --silent --show-error "${BASE}/SHASUMS256.txt" -o "$SHASUMS" && grep -q 'electron-v43.0.0-darwin-x64.zip' "$SHASUMS" && grep -q 'electron-v43.0.0-darwin-arm64.zip' "$SHASUMS"; then
-              break
-            fi
-            rm -f "$SHASUMS"
-          done
-          test -s "$SHASUMS" || { echo "::error::Cannot download Electron SHA256 manifest"; exit 1; }
-          cp "$SHASUMS" "$CACHE_ROOT/SHASUMS256.txt-$VERSION"
-          cp "$SHASUMS" "$CACHE_ROOT/SHASUMS256.txt"
           for ARCH in x64 arm64; do
             FILE="electron-v${VERSION}-darwin-${ARCH}.zip"
-            TEMP="$RUNNER_TEMP/${FILE}"
-            FOUND=0
+            VERIFIED=0
             for BASE in "$OFFICIAL" "$MIRROR"; do
-              echo "Fetching ${FILE} from ${BASE}"
-              if curl --fail --location --retry 5 --retry-all-errors --retry-delay 5 --connect-timeout 30 --max-time 600 --silent --show-error "${BASE}/${FILE}" -o "$TEMP" && unzip -tq "$TEMP" >/dev/null 2>&1; then
-                FOUND=1
+              echo "Checking ${FILE} from ${BASE}"
+              MANIFEST="$RUNNER_TEMP/SHASUMS-${ARCH}.txt"
+              ZIP="$DIST/$FILE"
+              rm -f "$ZIP" "$MANIFEST"
+              if ! curl -fLsS --retry 3 --retry-all-errors --retry-delay 4 --connect-timeout 25 --max-time 240 "${BASE}/SHASUMS256.txt" -o "$MANIFEST"; then
+                continue
+              fi
+              # Electron manifests may prefix filenames with '*' (binary checksums).
+              EXPECTED=$(awk -v file="$FILE" '{n=$2; sub(/^\\*/, "", n); sub(/^\\.\\//, "", n); if (n==file) {print $1; exit}}' "$MANIFEST")
+              if ! [[ "$EXPECTED" =~ ^[0-9a-fA-F]{64}$ ]]; then
+                echo "Manifest entry invalid for ${FILE}"
+                continue
+              fi
+              if ! curl -fLsS --retry 3 --retry-all-errors --retry-delay 4 --connect-timeout 25 --max-time 600 "${BASE}/${FILE}" -o "$ZIP"; then
+                continue
+              fi
+              ACTUAL=$(shasum -a 256 "$ZIP" | awk '{print $1}')
+              if [ "$ACTUAL" = "$EXPECTED" ] && unzip -tq "$ZIP" >/dev/null 2>&1; then
+                VERIFIED=1
+                echo "Verified ${FILE} SHA256: ${ACTUAL}"
                 break
               fi
-              rm -f "$TEMP"
+              echo "Checksum or ZIP validation failed for ${FILE} from ${BASE}"
             done
-            if [ "$FOUND" -ne 1 ]; then
-              echo "::error::Unable to download valid ${FILE} from GitHub or fallback mirror"
+            if [ "$VERIFIED" -ne 1 ]; then
+              echo "::error::No validated Electron distribution found for ${ARCH}"
               exit 1
             fi
-            EXPECTED_SHA=$(awk -v name="$FILE" '$2 == name { print $1 }' "$SHASUMS")
-            ACTUAL_SHA=$(shasum -a 256 "$TEMP" | awk '{print $1}')
-            if [ -z "$EXPECTED_SHA" ] || [ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]; then
-              echo "::error::SHA256 mismatch for $FILE"
-              exit 1
-            fi
-            # @electron/get hashes the official release URL's directory as its cache key.
-            CACHE_HASH=$(printf '%s' "$OFFICIAL" | shasum -a 256 | awk '{print $1}')
-            mkdir -p "$CACHE_ROOT/$CACHE_HASH"
-            mv "$TEMP" "$CACHE_ROOT/$CACHE_HASH/$FILE"
-            echo "Cached ${FILE} for electron-builder"
           done
-          # Provide electron-builder the verified checksums so @electron/get
-          # never fetches the checksum manifest during packaging.
-          node <<'NODE'
-          const fs = require('fs');
+          # electronDist accepts a directory of appropriately named ZIP files,
+          # bypassing @electron/get entirely at packaging time.
+          node - "$DIST" <<'NODE'
+          const fs = require('node:fs');
           const path = 'source/dsh-plugin-desktop/package.json';
-          const pkg = JSON.parse(fs.readFileSync(path, 'utf8'));
-          const manifest = fs.readFileSync(process.env.ELECTRON_CACHE + '/SHASUMS256.txt-43.0.0', 'utf8');
-          const checksums = {};
-          for (const arch of ['x64', 'arm64']) {
-            const filename = 'electron-v43.0.0-darwin-' + arch + '.zip';
-            const line = manifest.split(/\r?\n/).find(x => x.trim().endsWith(filename));
-            if (!line) throw Error('Checksum missing for ' + filename);
-            checksums[filename] = line.trim().split(/\s+/)[0];
-          }
-          pkg.build.electronDownload = { ...(pkg.build.electronDownload || {}), checksums };
-          fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + '\n');
-          console.log('Configured offline-verified Electron checksums', Object.keys(checksums));
+          const cfg = JSON.parse(fs.readFileSync(path, 'utf8'));
+          cfg.build.electronDist = process.argv[2];
+          delete cfg.build.electronDownload;
+          fs.writeFileSync(path, JSON.stringify(cfg, null, 2) + '\\n');
+          console.log('Using verified offline Electron distribution:', cfg.build.electronDist);
           NODE
 
       - name: Package unsigned Universal DMG
