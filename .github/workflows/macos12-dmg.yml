@@ -73,7 +73,7 @@ jobs:
                 continue
               fi
               # Electron manifests may prefix filenames with '*' (binary checksums).
-              EXPECTED=$(awk -v file="$FILE" '{n=$2; sub(/^\\*/, "", n); sub(/^\\.\\//, "", n); if (n==file) {print $1; exit}}' "$MANIFEST")
+              EXPECTED=$(awk -v file="$FILE" '{n=$2; sub(/^[*]/, "", n); sub(/^[.][/]/, "", n); if (n==file) {print $1; exit}}' "$MANIFEST")
               if ! [[ "$EXPECTED" =~ ^[0-9a-fA-F]{64}$ ]]; then
                 echo "Manifest entry invalid for ${FILE}"
                 continue
@@ -102,7 +102,7 @@ jobs:
           const cfg = JSON.parse(fs.readFileSync(path, 'utf8'));
           cfg.build.electronDist = process.argv[2];
           delete cfg.build.electronDownload;
-          fs.writeFileSync(path, JSON.stringify(cfg, null, 2) + '\\n');
+          fs.writeFileSync(path, JSON.stringify(cfg, null, 2));
           console.log('Using verified offline Electron distribution:', cfg.build.electronDist);
           NODE
 
