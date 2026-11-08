@@ -44,7 +44,7 @@ jobs:
         run: |
           corepack enable
           yarn install --no-immutable
-          node -e "const p=require('./dsh-plugin-desktop/package.json'); if(p.devDependencies.electron!=='43.8.7'||p.build.mac.minimumSystemVersion!=='12.0.0')process.exit(1)"
+          node -e "const p=require('./dsh-plugin-desktop/package.json'); if(p.devDependencies.electron!=='43.0.0'||p.build.mac.minimumSystemVersion!=='12.0.0')process.exit(1)"
 
       - name: Build desktop
         working-directory: source
