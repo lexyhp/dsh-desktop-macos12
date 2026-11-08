@@ -46,6 +46,31 @@ jobs:
           yarn install --no-immutable
           node -e "const p=require('./dsh-plugin-desktop/package.json'); if(p.devDependencies.electron!=='43.0.0'||p.build.mac.minimumSystemVersion!=='12.0.0')process.exit(1)"
 
+      - name: Fix upstream ASAR BigInt filesystem probe
+        working-directory: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          roots = [
+              Path("dsh-plugin-desktop/node_modules/@deepseek-ai/dsh-fs-local/lib/index.js"),
+              Path("node_modules/@deepseek-ai/dsh-fs-local/lib/index.js"),
+          ]
+          paths = list(dict.fromkeys(p.resolve() for p in roots if p.is_file()))
+          if not paths:
+              raise SystemExit("Cannot locate installed @deepseek-ai/dsh-fs-local/lib/index.js")
+          old = "Number(info.mode & 511n)"
+          new = "Number(BigInt(info.mode) & 511n)"
+          for path in paths:
+              source = path.read_text(encoding="utf-8")
+              count = source.count(old)
+              if count != 2:
+                  raise SystemExit(f"Unexpected dsh-fs-local probe count {count} in {path}")
+              path.write_text(source.replace(old, new), encoding="utf-8")
+              print(f"Patched {count} ASAR stat probes in {path}")
+          PY
+
       - name: Build desktop
         working-directory: source
         run: |
