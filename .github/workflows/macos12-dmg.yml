@@ -1,0 +1,78 @@
+name: Build DSH 2.0.17 for macOS 12 (experimental)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  monterey-dmg:
+    runs-on: macos-15
+    timeout-minutes: 120
+    steps:
+      - name: Checkout build instructions
+        uses: actions/checkout@v4
+        with:
+          path: kit
+          persist-credentials: false
+
+      - name: Checkout exact upstream DSH Desktop 2.0.17
+        uses: actions/checkout@v4
+        with:
+          repository: anywhere-labs/dsh-desktop
+          ref: v2.0.17
+          path: source
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.2
+
+      - name: Apply macOS Monterey compatibility changes
+        run: python3 kit/scripts/patch_monterey.py source
+
+      - name: Install patched dependencies
+        working-directory: source
+        run: |
+          corepack enable
+          yarn install
+          node -e "const p=require('./dsh-plugin-desktop/package.json');if(p.devDependencies.electron!=='43.8.7'||p.build.mac.minimumSystemVersion!=='12.0.0')process.exit(1)"
+
+      - name: Build desktop and community market
+        working-directory: source
+        run: |
+          yarn workspace dsh-community-market build
+          yarn workspace dsh-plugin-desktop build
+
+      - name: Package unsigned Universal DMG
+        working-directory: source
+        env:
+          DSH_PACKAGE_CHECK_ALREADY_RAN: '1'
+          DSH_MAC_SMOKE_ARCH: universal
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: yarn workspace dsh-plugin-desktop dist:mac-smoke
+
+      - name: Verify packaged minimum macOS and architectures
+        working-directory: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          DMG=$(find dsh-plugin-desktop/dist/mac-smoke -maxdepth 1 -name '*.dmg' -print -quit)
+          test -n "$DMG"
+          mkdir -p /tmp/dsh-mounted
+          hdiutil attach "$DMG" -mountpoint /tmp/dsh-mounted -nobrowse -readonly
+          trap 'hdiutil detach /tmp/dsh-mounted || true' EXIT
+          PLIST='/tmp/dsh-mounted/DSH Desktop.app/Contents/Info.plist'
+          /usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$PLIST" | grep -E '^12(\\.0){0,2}$'
+          lipo -verify_arch x86_64 arm64 '/tmp/dsh-mounted/DSH Desktop.app/Contents/MacOS/DSH Desktop'
+
+      - name: Upload experimental DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSH-Desktop-2.0.17-macOS12-universal-UNSIGNED
+          path: source/dsh-plugin-desktop/dist/mac-smoke/*.dmg
+          if-no-files-found: error
+          retention-days: 7
