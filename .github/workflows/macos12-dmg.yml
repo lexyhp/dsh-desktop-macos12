@@ -73,7 +73,7 @@ jobs:
                 continue
               fi
               # Electron manifests may prefix filenames with '*' (binary checksums).
-              EXPECTED=$(awk -v file="$FILE" '{n=$2; sub(/^[*]/, "", n); sub(/^[.][/]/, "", n); if (n==file) {print $1; exit}}' "$MANIFEST")
+              EXPECTED=$(awk -v file="$FILE" '{n=$2; if (substr(n,1,1)=="*") n=substr(n,2); if (substr(n,1,2)=="./") n=substr(n,3); if (n==file) {print $1; exit}}' "$MANIFEST")
               if ! [[ "$EXPECTED" =~ ^[0-9a-fA-F]{64}$ ]]; then
                 echo "Manifest entry invalid for ${FILE}"
                 continue
