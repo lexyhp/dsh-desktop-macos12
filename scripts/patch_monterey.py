@@ -14,6 +14,10 @@ assert package["peerDependencies"]["electron"] == "44.0.0", "Unexpected Electron
 package["devDependencies"]["electron"] = "43.8.7"
 package["peerDependencies"]["electron"] = "43.8.7"
 package["build"]["mac"]["minimumSystemVersion"] = "12.0.0"
+# Old build images have Xcode 16; .icon needs Xcode 26 actool.
+# Upstream already provides a prebuilt .icns for legacy macOS.
+assert (app / "build" / "app-icon.icns").is_file(), "Missing macOS legacy icon"
+package["build"]["mac"]["icon"] = "build/app-icon.icns"
 package_file.write_text(json.dumps(package, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 # Upstream expects Electron 44's precompiled fs-ext ABI 149. Electron 43 is ABI 148.
