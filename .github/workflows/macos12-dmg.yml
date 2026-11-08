@@ -14,7 +14,7 @@ permissions:
 jobs:
   monterey-dmg:
     runs-on: macos-15
-    timeout-minutes: 120
+    timeout-minutes: 180
     steps:
       - name: Checkout build instructions
         uses: actions/checkout@v4
@@ -58,7 +58,24 @@ jobs:
           DSH_PACKAGE_CHECK_ALREADY_RAN: '1'
           DSH_MAC_SMOKE_ARCH: universal
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-        run: yarn workspace dsh-plugin-desktop dist:mac-smoke
+        shell: bash
+        run: |
+          set -uo pipefail
+          # Some GitHub-hosted downloads intermittently return HTTP 504.
+          # Retry the complete packaging smoke without weakening verification.
+          for attempt in 1 2 3; do
+            echo "::group::Packaging attempt ${attempt}/3"
+            if yarn workspace dsh-plugin-desktop dist:mac-smoke; then
+              echo "::endgroup::"
+              exit 0
+            fi
+            echo "::endgroup::"
+            if [ "$attempt" -eq 3 ]; then
+              echo "::error::DMG packaging failed after 3 attempts"
+              exit 1
+            fi
+            sleep $((attempt * 15))
+          done
 
       - name: Verify minimum macOS version
         working-directory: source
