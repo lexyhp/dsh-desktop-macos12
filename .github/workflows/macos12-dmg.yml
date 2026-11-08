@@ -66,7 +66,17 @@ jobs:
           hdiutil attach "$DMG" -mountpoint /tmp/dsh-mounted -nobrowse -readonly
           trap 'hdiutil detach /tmp/dsh-mounted || true' EXIT
           PLIST='/tmp/dsh-mounted/DSH Desktop.app/Contents/Info.plist'
-          /usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$PLIST" | grep -E '^12(\\.0){0,2}$'
+          /usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$PLIST" | grep -E '^12(\.0){0,2}
+          lipo -verify_arch x86_64 arm64 '/tmp/dsh-mounted/DSH Desktop.app/Contents/MacOS/DSH Desktop'
+
+      - name: Upload experimental DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSH-Desktop-2.0.17-macOS12-universal-UNSIGNED
+          path: source/dsh-plugin-desktop/dist/mac-smoke/*.dmg
+          if-no-files-found: error
+          retention-days: 7
+
           lipo -verify_arch x86_64 arm64 '/tmp/dsh-mounted/DSH Desktop.app/Contents/MacOS/DSH Desktop'
 
       - name: Upload experimental DMG
