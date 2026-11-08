@@ -11,13 +11,16 @@ package = json.loads(package_file.read_text(encoding="utf-8"))
 assert package["version"] == "2.0.17", "Expected DSH Desktop 2.0.17"
 assert package["devDependencies"]["electron"] == "44.0.0", "Unexpected upstream Electron version"
 assert package["peerDependencies"]["electron"] == "44.0.0", "Unexpected Electron peer version"
-# Pin the exact supported Electron 43.0.0 runtime fingerprint.\n# node-addon-require-builtin 0.1.6 rejects later Electron 43 patch versions.\npackage["devDependencies"]["electron"] = "43.0.0"
+# Pin the exact supported Electron 43.0.0 runtime fingerprint.
+# node-addon-require-builtin 0.1.6 rejects later Electron 43 patch versions.
+package["devDependencies"]["electron"] = "43.0.0"
 package["peerDependencies"]["electron"] = "43.0.0"
 package["build"]["mac"]["minimumSystemVersion"] = "12.0.0"
 # Old build images have Xcode 16; .icon needs Xcode 26 actool.
 # Upstream already provides a prebuilt .icns for legacy macOS.
 assert (app / "build" / "app-icon.icns").is_file(), "Missing macOS legacy icon"
 package["build"]["mac"]["icon"] = "build/app-icon.icns"
+assert package["devDependencies"]["electron"] == package["peerDependencies"]["electron"] == "43.0.0"
 package_file.write_text(json.dumps(package, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 # Upstream expects Electron 44's precompiled fs-ext ABI 149. Electron 43 is ABI 148.
